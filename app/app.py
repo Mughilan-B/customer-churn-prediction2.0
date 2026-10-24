@@ -186,6 +186,41 @@ elif page == "Predictions":
         gauge=go.Figure(go.Indicator(mode="gauge+number",value=prob*100,number={"suffix":"%"},gauge={"axis":{"range":[0,100]},"bar":{"color":"#4DE2FF"},"steps":[{"range":[0,30],"color":"#123746"},{"range":[30,60],"color":"#493A20"},{"range":[60,100],"color":"#482536"}]}))
         st.plotly_chart(chart_theme(gauge,260),use_container_width=True)
 
+        st.markdown("#### Customer-specific signals to review")
+        signals = []
+        if contract == "Month-to-month":
+            signals.append(("Contract", "Month-to-month contracts are associated with higher churn in this dataset.", "warning"))
+        if tenure <= 12:
+            signals.append(("Tenure", "Short tenure: check onboarding, service setup and early customer satisfaction.", "warning"))
+        if monthly >= df["MonthlyCharges"].quantile(.75):
+            signals.append(("Monthly charges", "Monthly charges are in the upper quartile of this dataset; review plan fit and billing clarity.", "info"))
+        if payment == "Electronic check":
+            signals.append(("Payment method", "Electronic-check customers show a higher churn association in this dataset; check for payment friction.", "info"))
+        if techsupport == "No" and internet != "No":
+            signals.append(("Support", "Technical support is not selected; ask whether the customer needs help or support options.", "info"))
+        if not signals:
+            st.success("No common review signals were triggered by these rules. Continue normal customer care.")
+        for label, message, kind in signals:
+            getattr(st, kind)(f"**{label}:** {message}")
+        st.caption("These are transparent dataset-level associations and service-review prompts, not causal explanations of the model's decision.")
+
+        st.markdown("#### Suggested retention plan")
+        if level == "High":
+            actions = ["Assign a human retention specialist for a timely check-in.", "Ask about the main reason for dissatisfaction before proposing an offer.", "Compare suitable plans and support options; document the customer's consent and outcome."]
+        elif level == "Medium":
+            actions = ["Send a relevant service check-in.", "Review unresolved support issues and billing clarity.", "Offer a suitable loyalty benefit only where commercially appropriate."]
+        else:
+            actions = ["Maintain service quality and regular engagement.", "Continue standard support and monitor new complaints or service changes."]
+        for action in actions:
+            st.markdown("- " + action)
+        report = pd.DataFrame([{
+            "Model": model_choice, "Estimated churn probability": round(prob, 4),
+            "Risk level": level, "Tenure months": tenure, "Contract": contract,
+            "Monthly charges": monthly, "Payment method": payment,
+            "Suggested actions": " | ".join(actions)
+        }])
+        st.download_button("Download prediction summary (CSV)", report.to_csv(index=False).encode("utf-8"), "churn_prediction_summary.csv", "text/csv")
+
 
 elif page == "Customer Explorer":
     st.markdown("### Customer 360 Explorer")
