@@ -53,15 +53,16 @@ retained = df[df["Churn"].astype(str).str.lower().eq("no")]
 churn_rate = len(churned) / max(len(df), 1) * 100
 try:
     df["ChurnProbability"] = rf_model.predict_proba(df.drop(columns=["customerID","Churn"]))[:, 1]
-except Exception:
-    df["ChurnProbability"] = np.where(df["Churn"].astype(str).str.lower().eq("yes"), 0.75, 0.2)
+except Exception as prediction_error:
+    df["ChurnProbability"] = np.nan
+    st.warning(f"Dataset-level model scoring is unavailable: {prediction_error}. Risk scores are not being fabricated.")
 df["RiskLevel"] = pd.cut(df["ChurnProbability"], bins=[-0.001,0.30,0.60,1.001], labels=["Low","Medium","High"])
 high_risk = df[df["RiskLevel"].astype(str).eq("High")]
 
 with st.sidebar:
     st.markdown("## ✦ Churn AI")
     st.caption("CUSTOMER INTELLIGENCE")
-    page = st.radio("NAVIGATION", ["Dashboard", "Predictions", "Model Insights", "Settings"], label_visibility="visible")
+    page = st.radio("NAVIGATION", ["Dashboard", "Predictions", "Customer Explorer", "Bulk Risk Scanner", "What-if Simulator", "Model Insights", "Settings"], label_visibility="visible")
     st.markdown("---")
     st.markdown("**Workspace**")
     st.caption("Telco Customer Churn dataset")
@@ -184,6 +185,125 @@ elif page == "Predictions":
         st.markdown("#### Risk analysis")
         gauge=go.Figure(go.Indicator(mode="gauge+number",value=prob*100,number={"suffix":"%"},gauge={"axis":{"range":[0,100]},"bar":{"color":"#4DE2FF"},"steps":[{"range":[0,30],"color":"#123746"},{"range":[30,60],"color":"#493A20"},{"range":[60,100],"color":"#482536"}]}))
         st.plotly_chart(chart_theme(gauge,260),use_container_width=True)
+
+
+elif page == "Customer Explorer":
+    st.markdown("### Customer 360 Explorer")
+    st.caption("Search and filter customer records, inspect a profile, and download the filtered view.")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        search_id = st.text_input("Customer ID contains")
+    with c2:
+        risks = st.multiselect("Risk levels", ["Low", "Medium", "High"], default=["Low", "Medium", "High"])
+    with c3:
+        contracts = st.multiselect("Contract types", sorted(df["Contract"].dropna().unique()), default=sorted(df["Contract"].dropna().unique()))
+    filtered = df.copy()
+    if search_id.strip():
+        filtered = filtered[filtered["customerID"].astype(str).str.contains(search_id.strip(), case=False, na=False)]
+    filtered = filtered[filtered["RiskLevel"].astype(str).isin(risks) & filtered["Contract"].isin(contracts)]
+    st.metric("Matching customers", f"{len(filtered):,}")
+    if not filtered.empty:
+        customer_id = st.selectbox("Select customer profile", filtered["customerID"].astype(str).tolist())
+        row = filtered[filtered["customerID"].astype(str) == customer_id].iloc[0]
+        a, b, c, d = st.columns(4)
+        a.metric("Risk level", str(row["RiskLevel"]))
+        b.metric("Tenure", f"{int(row['tenure'])} months")
+        c.metric("Monthly charges", f"{float(row['MonthlyCharges']):.2f} USD")
+        d.metric("Churn probability", "Unavailable" if pd.isna(row["ChurnProbability"]) else f"{row['ChurnProbability']*100:.1f}%")
+        st.dataframe(pd.DataFrame({"Attribute": row.index, "Value": row.astype(str).values}), use_container_width=True, hide_index=True)
+        st.markdown("#### Retention suggestions")
+        if row["Contract"] == "Month-to-month":
+            st.info("Discuss the benefits and total cost of longer-term plans without pressuring the customer.")
+        if row["tenure"] <= 12:
+            st.info("Early-tenure customer: offer onboarding help and check whether the service meets expectations.")
+        if row["MonthlyCharges"] >= df["MonthlyCharges"].quantile(.75):
+            st.info("Review plan fit and billing clarity for this higher-spend customer.")
+        if str(row.get("TechSupport", "")) == "No":
+            st.info("Consider offering a technical-support check-in.")
+    else:
+        st.info("No customers match these filters.")
+    st.download_button("Download filtered customers", filtered.to_csv(index=False).encode("utf-8"), "customer_explorer.csv", "text/csv", use_container_width=True)
+
+elif page == "Bulk Risk Scanner":
+    st.markdown("### Bulk Customer Risk Scanner")
+    st.caption("Upload a CSV of customer records to score many customers at once, then download the results.")
+    st.info("Required columns must match the training dataset feature names. customerID and Churn are optional; Churn is never used as a prediction input.")
+    uploaded = st.file_uploader("Upload customer CSV", type=["csv"])
+    if uploaded:
+        try:
+            batch = pd.read_csv(uploaded)
+            if "TotalCharges" in batch.columns:
+                batch["TotalCharges"] = pd.to_numeric(batch["TotalCharges"], errors="coerce").fillna(0)
+            feature_cols = [col for col in df.columns if col not in ["customerID", "Churn", "ChurnProbability", "RiskLevel"]]
+            missing = [col for col in feature_cols if col not in batch.columns]
+            if missing:
+                st.error("Missing required columns: " + ", ".join(missing))
+                template = df.drop(columns=["Churn", "ChurnProbability", "RiskLevel"], errors="ignore").head(0)
+                st.download_button("Download CSV template", template.to_csv(index=False).encode("utf-8"), "churn_upload_template.csv", "text/csv")
+            else:
+                model_choice = st.selectbox("Model for batch scoring", list(models.keys()), key="batch_model")
+                features = batch[feature_cols].copy()
+                for col in features.select_dtypes(include=["object"]).columns:
+                    features[col] = features[col].astype(str)
+                probs = models[model_choice].predict_proba(features)[:, 1]
+                results = batch.copy()
+                results["ChurnProbability"] = probs
+                results["RiskLevel"] = pd.cut(probs, [-.001, .30, .60, 1.001], labels=["Low", "Medium", "High"]).astype(str)
+                action_map = {"Low": "Maintain service quality", "Medium": "Proactive check-in and relevant loyalty benefit", "High": "Prioritize human retention review and tailored offer"}
+                results["RecommendedAction"] = results["RiskLevel"].map(action_map)
+                high = int((results["RiskLevel"] == "High").sum())
+                a, b, c = st.columns(3)
+                a.metric("Scanned", f"{len(results):,}")
+                b.metric("High risk", f"{high:,}")
+                c.metric("High-risk share", f"{100*high/max(len(results),1):.1f}%")
+                st.dataframe(results.sort_values("ChurnProbability", ascending=False), use_container_width=True, hide_index=True)
+                st.download_button("Download scored CSV", results.to_csv(index=False).encode("utf-8"), "churn_risk_scan.csv", "text/csv", use_container_width=True)
+                st.caption("Model scores are estimates, not certainties. Review context and treat customers fairly before acting.")
+        except Exception as exc:
+            st.error(f"Could not score this file: {exc}")
+
+elif page == "What-if Simulator":
+    st.markdown("### Churn What-if Simulator")
+    st.caption("Compare model scores across contract options for one hypothetical customer. This is a scenario comparison, not proof of causation.")
+    model_choice = st.selectbox("Model", list(models.keys()), index=1, key="whatif_model")
+    a, b, c = st.columns(3)
+    with a:
+        gender = st.selectbox("Gender", ["Female", "Male"], key="w_gender")
+        senior = st.selectbox("Senior citizen", [0, 1], key="w_senior")
+        partner = st.selectbox("Partner", ["Yes", "No"], key="w_partner")
+        dependents = st.selectbox("Dependents", ["Yes", "No"], key="w_dependents")
+        tenure = st.slider("Tenure (months)", 0, 72, 12, key="w_tenure")
+        phone = st.selectbox("Phone service", ["Yes", "No"], key="w_phone")
+        lines = st.selectbox("Multiple lines", ["No", "Yes", "No phone service"], key="w_lines")
+    with b:
+        internet = st.selectbox("Internet service", ["DSL", "Fiber optic", "No"], key="w_internet")
+        security = st.selectbox("Online security", ["No", "Yes", "No internet service"], key="w_security")
+        backup = st.selectbox("Online backup", ["No", "Yes", "No internet service"], key="w_backup")
+        device = st.selectbox("Device protection", ["No", "Yes", "No internet service"], key="w_device")
+        support = st.selectbox("Tech support", ["No", "Yes", "No internet service"], key="w_support")
+        tv = st.selectbox("Streaming TV", ["No", "Yes", "No internet service"], key="w_tv")
+        movies = st.selectbox("Streaming movies", ["No", "Yes", "No internet service"], key="w_movies")
+    with c:
+        contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"], key="w_contract")
+        paperless = st.selectbox("Paperless billing", ["Yes", "No"], key="w_paperless")
+        payment = st.selectbox("Payment method", ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"], key="w_payment")
+        monthly = st.number_input("Monthly charges", 0.0, 200.0, 70.0, 1.0, key="w_monthly")
+        total = st.number_input("Total charges", 0.0, 10000.0, 840.0, 10.0, key="w_total")
+    base = {"gender":gender,"SeniorCitizen":senior,"Partner":partner,"Dependents":dependents,"tenure":tenure,"PhoneService":phone,"MultipleLines":lines,"InternetService":internet,"OnlineSecurity":security,"OnlineBackup":backup,"DeviceProtection":device,"TechSupport":support,"StreamingTV":tv,"StreamingMovies":movies,"PaperlessBilling":paperless,"PaymentMethod":payment,"MonthlyCharges":monthly,"TotalCharges":total}
+    scenarios = []
+    try:
+        for contract_option in ["Month-to-month", "One year", "Two year"]:
+            candidate = pd.DataFrame([{**base, "Contract": contract_option}])
+            probability = float(models[model_choice].predict_proba(candidate)[0, 1])
+            scenarios.append({"Contract option": contract_option, "Estimated churn probability (%)": round(probability*100, 2)})
+        st.metric("Month-to-month scenario score", f"{scenarios[0]['Estimated churn probability (%)']:.1f}%")
+        scenario_df = pd.DataFrame(scenarios)
+        fig = px.bar(scenario_df, x="Contract option", y="Estimated churn probability (%)", text=scenario_df["Estimated churn probability (%)"].map(lambda x: f"{x:.1f}%"))
+        fig.update_traces(marker_color="#4DE2FF", textposition="outside")
+        st.plotly_chart(chart_theme(fig, 330), use_container_width=True)
+        st.caption("Scores reflect patterns learned by the model. Contract changes may not be suitable for every customer; discuss options transparently.")
+    except Exception as exc:
+        st.error(f"Scenario prediction failed: {exc}")
 
 elif page == "Model Insights":
     st.markdown("### Model comparison")
