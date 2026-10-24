@@ -90,7 +90,6 @@ components.html("""
 })();
 </script>
 """, height=0, width=0)
-, unsafe_allow_html=True)
 
 @st.cache_data
 def get_data():
