@@ -5,6 +5,44 @@ import matplotlib.pyplot as plt
 from joblib import load
 import shap
 
+# ── Churn AI visual system ──────────────────────────────────────────────
+st.set_page_config(
+    page_title="Churn AI | Customer Intelligence",
+    page_icon="✦",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+:root { --bg:#070B16; --panel:#0D1426; --line:rgba(104,145,210,.20); --cyan:#4DE2FF; --blue:#638BFF; --muted:#94A7C7; }
+.stApp { background: radial-gradient(ellipse at 12% 0%, rgba(35,83,166,.20), transparent 35%), radial-gradient(ellipse at 90% 5%, rgba(0,201,220,.09), transparent 28%), var(--bg); color:#EAF2FF; font-family:'DM Sans',sans-serif; }
+[data-testid="stHeader"] { background:transparent; }
+.block-container { max-width:1440px; padding-top:2rem; padding-bottom:3rem; }
+h1,h2,h3 { font-family:'Space Grotesk',sans-serif !important; letter-spacing:-.035em; }
+h1 { color:#F3F7FF !important; font-size:2.35rem !important; }
+h2,h3 { color:#DCE8FF !important; }
+p, label, [data-testid="stMarkdownContainer"] { color:#C5D2EA; }
+[data-testid="stTabs"] button { color:#91A5C8; font-weight:600; border-radius:10px 10px 0 0; }
+[data-testid="stTabs"] button[aria-selected="true"] { color:var(--cyan); border-bottom:2px solid var(--cyan); }
+[data-testid="stVerticalBlockBorderWrapper"], [data-testid="stMetric"], [data-testid="stExpander"] { background:linear-gradient(145deg,rgba(17,29,53,.88),rgba(10,17,33,.92)); border:1px solid var(--line); border-radius:16px; padding:14px; }
+[data-testid="stMetricLabel"] { color:#91A5C8 !important; }
+[data-testid="stMetricValue"] { color:#F2F7FF !important; font-family:'Space Grotesk',sans-serif; }
+.stButton > button { background:linear-gradient(105deg,#3478F6,#14B8D4); color:#04111F; border:0; border-radius:10px; padding:.72rem 1.1rem; font-weight:700; box-shadow:0 8px 28px rgba(37,147,255,.18); transition:transform .15s ease,filter .15s ease; }
+.stButton > button:hover { filter:brightness(1.12); transform:translateY(-1px); color:#04111F; border:0; }
+div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-baseweb="textarea"] > div { background:#0B1427; border-color:#263957; border-radius:10px; }
+input, textarea { color:#EAF2FF !important; }
+[data-testid="stSlider"] [role="slider"] { background:var(--cyan); }
+[data-testid="stProgressBar"] > div > div { background:linear-gradient(90deg,#3978FF,#4DE2FF); }
+hr { border-color:var(--line); }
+.churn-hero { padding:26px 30px; margin:0 0 22px; border:1px solid rgba(77,226,255,.22); border-radius:20px; background:linear-gradient(115deg,rgba(19,39,75,.88),rgba(10,21,42,.86)); box-shadow:0 18px 55px rgba(0,0,0,.15); }
+.churn-eyebrow { color:#4DE2FF; font-size:.75rem; letter-spacing:.18em; font-weight:700; text-transform:uppercase; }
+.churn-title { color:#F3F7FF; font-family:'Space Grotesk',sans-serif; font-size:2rem; font-weight:700; margin:.45rem 0; }
+.churn-subtitle { color:#9DB0D1; font-size:1rem; }
+</style>
+""", unsafe_allow_html=True)
+
 logistic_model = load("models/logistic_model.pkl")
 rf_model = load("models/rf_model.pkl")
 xgb_model = load("models/xgb_model.pkl")
@@ -15,9 +53,14 @@ rf_classifier = rf_model.named_steps["model"]
 
 with tab1:
 
-    st.title("Customer Churn Prediction App")
-
-    st.write("Enter customer details to predict churn probability")
+    st.markdown("""
+    <div class="churn-hero">
+      <div class="churn-eyebrow">✦ CUSTOMER INTELLIGENCE PLATFORM</div>
+      <div class="churn-title">Churn AI <span style="color:#4DE2FF">/</span> Prediction Studio</div>
+      <div class="churn-subtitle">Predict customer attrition, understand the signals, and turn risk into retention action.</div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption("Configure a customer profile below, then run a prediction to see churn probability and model explanation.")
 
 
     model_choice = st.selectbox(
