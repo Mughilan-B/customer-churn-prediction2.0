@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -12,7 +13,15 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 :root{--bg:#070B16;--panel:#0D1426;--line:rgba(104,145,210,.22);--cyan:#4DE2FF;--blue:#638BFF}
-.stApp{background:radial-gradient(ellipse at 12% 0%,rgba(35,83,166,.2),transparent 35%),radial-gradient(ellipse at 90% 5%,rgba(0,201,220,.09),transparent 28%),#070B16;color:#EAF2FF;font-family:'DM Sans',sans-serif}
+.stApp{background:radial-gradient(ellipse at 12% 0%,rgba(35,83,166,.28),transparent 38%),radial-gradient(ellipse at 88% 8%,rgba(0,201,220,.13),transparent 30%),radial-gradient(ellipse at 50% 100%,rgba(57,66,180,.12),transparent 42%),linear-gradient(135deg,#060A14 0%,#091326 48%,#070B16 100%);background-attachment:fixed;color:#EAF2FF;font-family:'DM Sans',sans-serif}
+.stApp:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(91,137,204,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(91,137,204,.045) 1px,transparent 1px);background-size:46px 46px;mask-image:linear-gradient(to bottom,black 0%,rgba(0,0,0,.55) 45%,transparent 95%)}
+[data-testid="stAppViewContainer"]{background:transparent;position:relative}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,rgba(10,19,38,.96),rgba(7,12,25,.98));border-right:1px solid rgba(77,226,255,.13)}
+[data-testid="stMetric"],[data-testid="stVerticalBlockBorderWrapper"]{backdrop-filter:blur(14px);box-shadow:0 8px 30px rgba(0,0,0,.12)}
+.stButton>button{box-shadow:0 0 18px rgba(20,184,212,.12);transition:transform .18s ease,box-shadow .18s ease}
+.stButton>button:hover{transform:translateY(-2px);box-shadow:0 0 24px rgba(77,226,255,.28)}
+.hero{box-shadow:0 12px 42px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.035)}
+
 [data-testid="stHeader"]{background:transparent}
 .block-container{max-width:1500px;padding-top:1.7rem;padding-bottom:3rem}
 h1,h2,h3{font-family:'Space Grotesk',sans-serif!important;letter-spacing:-.03em;color:#F3F7FF!important}
@@ -29,6 +38,59 @@ input{color:#EAF2FF!important}hr{border-color:var(--line)}
 .small-note{color:#8EA2C4;font-size:.82rem}
 </style>
 """, unsafe_allow_html=True)
+
+# Best-effort cursor trail: the overlay is injected into the parent page when the
+# Streamlit hosting environment permits same-origin DOM access. If blocked by the
+# browser sandbox, the dashboard remains fully functional without the effect.
+components.html("""
+<script>
+(() => {
+  try {
+    const doc = window.parent.document;
+    if (doc.getElementById('churn-cursor-trail')) return;
+    const canvas = doc.createElement('canvas');
+    canvas.id = 'churn-cursor-trail';
+    Object.assign(canvas.style, {
+      position: 'fixed', inset: '0', width: '100vw', height: '100vh',
+      pointerEvents: 'none', zIndex: '99999'
+    });
+    doc.body.appendChild(canvas);
+    const ctx = canvas.getContext('2d');
+    let w = 0, h = 0, points = [];
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = canvas.width = Math.floor(window.innerWidth * dpr);
+      h = canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = window.innerWidth + 'px';
+      canvas.style.height = window.innerHeight + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    doc.addEventListener('mousemove', e => {
+      points.push({x:e.clientX,y:e.clientY,life:1});
+      if(points.length>24) points.shift();
+    }, {passive:true});
+    const draw = () => {
+      ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+      for(let i=1;i<points.length;i++){
+        const p=points[i], prev=points[i-1];
+        ctx.beginPath();
+        ctx.moveTo(prev.x,prev.y); ctx.lineTo(p.x,p.y);
+        ctx.strokeStyle='rgba(77,226,255,'+(i/points.length*.42)+')';
+        ctx.lineWidth=(i/points.length)*3;
+        ctx.lineCap='round'; ctx.stroke();
+      }
+      points.forEach(p=>p.life-=.035);
+      points=points.filter(p=>p.life>0);
+      requestAnimationFrame(draw);
+    };
+    draw();
+  } catch (e) { /* Cursor trail is optional; keep the app usable if blocked. */ }
+})();
+</script>
+""", height=0, width=0)
+, unsafe_allow_html=True)
 
 @st.cache_data
 def get_data():
