@@ -85,7 +85,7 @@ if page == "Dashboard":
     a,b,c,d = st.columns(4)
     a.metric("TOTAL CUSTOMERS", f"{len(df):,}", "Dataset records")
     b.metric("OVERALL CHURN RATE", f"{churn_rate:.1f}%", f"{len(churned):,} churned")
-    c.metric("AVG. MONTHLY CHARGES", f"${df['MonthlyCharges'].mean():.2f}", "Across all customers")
+    c.metric("AVG. MONTHLY CHARGES", f"₹{df['MonthlyCharges'].mean():.2f}", "Across all customers")
     d.metric("HIGH-RISK CUSTOMERS", f"{len(high_risk):,}", f"{len(high_risk)/max(len(df),1)*100:.1f}% of customers")
 
     left,right = st.columns([1.45,1])
@@ -130,10 +130,13 @@ if page == "Dashboard":
         fig.update_traces(marker_color="#14B8D4",textposition="outside")
         st.plotly_chart(chart_theme(fig,280),use_container_width=True)
 
-    st.markdown("### High-Risk Customers")
-    view = high_risk.sort_values("ChurnProbability",ascending=False).head(10).copy()
-    view["Churn Probability"] = (view["ChurnProbability"]*100).round(1).astype(str)+"%"
-    st.dataframe(view[["customerID","tenure","Contract","MonthlyCharges","PaymentMethod","Churn Probability","RiskLevel"]].rename(columns={"customerID":"Customer ID","tenure":"Tenure (months)","Contract":"Contract","MonthlyCharges":"Monthly charges","PaymentMethod":"Payment method","RiskLevel":"Risk level"}),use_container_width=True,hide_index=True)
+    st.markdown("### Customer Risk Explorer")
+    selected_risk = st.selectbox("Choose risk level to view", ["High", "Medium", "Low"], index=0, key="dashboard_risk_filter")
+    selected_customers = df[df["RiskLevel"].astype(str).eq(selected_risk)].copy()
+    view = selected_customers.sort_values("ChurnProbability", ascending=False, na_position="last").head(10).copy()
+    view["Churn Probability"] = view["ChurnProbability"].map(lambda value: "Unavailable" if pd.isna(value) else f"{value*100:.1f}%")
+    st.caption(f"Showing up to 10 {selected_risk.lower()}-risk customers. Change the dropdown to switch between High, Medium and Low risk.")
+    st.dataframe(view[["customerID","tenure","Contract","MonthlyCharges","PaymentMethod","Churn Probability","RiskLevel"]].rename(columns={"customerID":"Customer ID","tenure":"Tenure (months)","Contract":"Contract","MonthlyCharges":"Monthly charges (₹)","PaymentMethod":"Payment method","RiskLevel":"Risk level"}),use_container_width=True,hide_index=True)
 
 elif page == "Predictions":
     st.markdown("### Predict an individual customer's churn risk")
@@ -164,8 +167,8 @@ elif page == "Predictions":
             contract=st.selectbox("Contract",["Month-to-month","One year","Two year"])
             paperless=st.selectbox("Paperless billing",["Yes","No"])
             payment=st.selectbox("Payment method",["Electronic check","Mailed check","Bank transfer (automatic)","Credit card (automatic)"])
-            monthly=st.number_input("Monthly charges",min_value=0.0,max_value=200.0,value=70.0,step=1.0)
-            total=st.number_input("Total charges",min_value=0.0,max_value=10000.0,value=840.0,step=10.0)
+            monthly=st.number_input("Monthly charges (₹)",min_value=0.0,max_value=200.0,value=70.0,step=1.0)
+            total=st.number_input("Total charges (₹)",min_value=0.0,max_value=10000.0,value=840.0,step=10.0)
         submitted=st.form_submit_button("✦ Predict Churn",use_container_width=True)
     if submitted:
         input_df=pd.DataFrame({"gender":[gender],"SeniorCitizen":[senior],"Partner":[partner],"Dependents":[dependents],"tenure":[tenure],"PhoneService":[phoneservice],"MultipleLines":[multiplelines],"InternetService":[internet],"OnlineSecurity":[onlinesecurity],"OnlineBackup":[onlinebackup],"DeviceProtection":[deviceprotection],"TechSupport":[techsupport],"StreamingTV":[streamingtv],"StreamingMovies":[streamingmovies],"Contract":[contract],"PaperlessBilling":[paperless],"PaymentMethod":[payment],"MonthlyCharges":[monthly],"TotalCharges":[total]})
@@ -243,7 +246,7 @@ elif page == "Customer Explorer":
         a, b, c, d = st.columns(4)
         a.metric("Risk level", str(row["RiskLevel"]))
         b.metric("Tenure", f"{int(row['tenure'])} months")
-        c.metric("Monthly charges", f"{float(row['MonthlyCharges']):.2f} USD")
+        c.metric("Monthly charges", f"₹{float(row['MonthlyCharges']):.2f}")
         d.metric("Churn probability", "Unavailable" if pd.isna(row["ChurnProbability"]) else f"{row['ChurnProbability']*100:.1f}%")
         st.dataframe(pd.DataFrame({"Attribute": row.index, "Value": row.astype(str).values}), use_container_width=True, hide_index=True)
         st.markdown("#### Retention suggestions")
@@ -322,8 +325,8 @@ elif page == "What-if Simulator":
         contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"], key="w_contract")
         paperless = st.selectbox("Paperless billing", ["Yes", "No"], key="w_paperless")
         payment = st.selectbox("Payment method", ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"], key="w_payment")
-        monthly = st.number_input("Monthly charges", 0.0, 200.0, 70.0, 1.0, key="w_monthly")
-        total = st.number_input("Total charges", 0.0, 10000.0, 840.0, 10.0, key="w_total")
+        monthly = st.number_input("Monthly charges (₹)", 0.0, 200.0, 70.0, 1.0, key="w_monthly")
+        total = st.number_input("Total charges (₹)", 0.0, 10000.0, 840.0, 10.0, key="w_total")
     base = {"gender":gender,"SeniorCitizen":senior,"Partner":partner,"Dependents":dependents,"tenure":tenure,"PhoneService":phone,"MultipleLines":lines,"InternetService":internet,"OnlineSecurity":security,"OnlineBackup":backup,"DeviceProtection":device,"TechSupport":support,"StreamingTV":tv,"StreamingMovies":movies,"PaperlessBilling":paperless,"PaymentMethod":payment,"MonthlyCharges":monthly,"TotalCharges":total}
     scenarios = []
     try:
